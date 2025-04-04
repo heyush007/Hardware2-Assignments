@@ -1,50 +1,54 @@
 from machine import Pin, I2C
 import ssd1306
-import time
+import utime
 
 # OLED display dimensions
 WIDTH = 128
 HEIGHT = 64
-MID_HEIGHT = HEIGHT // 2  # Middle of the screen
 
-# Initialize I2C and OLED
+# Button Pins
+SW0 = 9  # Moves Down
+SW1 = 8  # Clear Screen
+SW2 = 7  # Moves Up 
+
+# Initialize I2C interface and OLED display
 i2c = I2C(1, scl=Pin(15), sda=Pin(14), freq=400000)
 oled = ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
 
-# Button setup
-SW0 = Pin(9, Pin.IN, Pin.PULL_UP)  
-SW1 = Pin(8, Pin.IN, Pin.PULL_UP)  
-SW2 = Pin(7, Pin.IN, Pin.PULL_UP)  
+# Initialize buttons
+btn_up = Pin(SW2, Pin.IN, Pin.PULL_UP)  
+btn_clear = Pin(SW1, Pin.IN, Pin.PULL_UP)
+btn_down = Pin(SW0, Pin.IN, Pin.PULL_UP)  
 
-# Initial position
-x = 0
-y = MID_HEIGHT
-
-# Drawing parameters
-dx = 1 
-dy = 2
-
-def update_display(): 
+def draw_pixel(x, y):
     oled.pixel(x, y, 1)
     oled.show()
 
-while True:
-    if not SW2():
-        y = max(0, y - dy)
+def clear_screen():
+    oled.fill(0)
+    oled.show()
+
+def main():
+    x = 0  # Start from the left edge
+    y = HEIGHT // 2  # Middle of the screen
+    clear_screen()
     
-    if not SW0(): 
-        y = min(HEIGHT - 1, y + dy)
-    
-    if not SW1(): 
-        x, y = 0, MID_HEIGHT
-        oled.fill(0)
-        oled.show()
-        time.sleep(0.2)  # Debounce delay
+    while True:
+        if not btn_up.value():  
+            y = max(0, y - 1)  
+            
+        if not btn_down.value(): 
+            y = min(HEIGHT - 1, y + 1)  
+            
+        if not btn_clear.value():
+            x = 0
+            y = HEIGHT // 2
+            clear_screen()
+        
+        draw_pixel(x, y)
+        
+        x += 1
+        if x >= WIDTH:
+            x = 0  # Wrap around to the left
 
-    x += dx  
-
-    if x >= WIDTH:  
-        x = 0
-
-    update_display()
-    time.sleep(0.1)  
+main()

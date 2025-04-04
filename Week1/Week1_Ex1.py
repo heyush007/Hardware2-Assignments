@@ -1,45 +1,44 @@
 from machine import Pin, I2C
-import ssd1306
-import time
+from ssd1306 import SSD1306_I2C
+import utime
+from time import sleep
 
-# OLED display dimensions
-WIDTH = 128
-HEIGHT = 32
 
-# Initialize I2C and OLED
 i2c = I2C(1, scl=Pin(15), sda=Pin(14), freq=400000)
-oled = ssd1306.SSD1306_I2C(WIDTH, HEIGHT, i2c)
+oled_width = 128
+oled_height = 64
+oled = SSD1306_I2C(oled_width, oled_height, i2c)
 
-# Initialize buttons
+char_h = 8
+char_w = 8
+
+UFO = "<===>"
+y= oled_height - char_h
+step = 4
+
+ufo_position = int((oled_width - (len(UFO) * char_w)) / 2)
+
 sw0 = Pin(9, Pin.IN, Pin.PULL_UP)
-sw2 = Pin(7, Pin.IN, Pin.PULL_UP)  
+sw2 = Pin(7, Pin.IN, Pin.PULL_UP)
 
-# UFO settings
-ufo = "<=>"
-font_size = 8 
-ufo_width = len(ufo) * font_size 
-x_pos = 50 
-y_pos = HEIGHT - font_size
-
-def draw_ufo(x):
-    oled.fill(0)  
-    oled.text(ufo, x, y_pos)
+def display_ufo(x):
+    oled.fill(0)
+    oled.text(UFO, x, y) 
     oled.show()
 
-# Initial UFO display
-draw_ufo(x_pos)
+def is_button_pressed(button):
+    return not button.value()
 
 while True:
-    if not sw0():
-        if x_pos + ufo_width < WIDTH: 
-            x_pos += font_size  
-            draw_ufo(x_pos)
-            time.sleep(0.1)
-    
-    if not sw2():  
-        if x_pos > 0: 
-            x_pos -= font_size  
-            draw_ufo(x_pos)
-            time.sleep(0.1)
+    if is_button_pressed(sw2):
+        ufo_position -= step  
+    elif is_button_pressed(sw0):
+        ufo_position += step  
 
 
+    if ufo_position < 0:
+        ufo_position = 0
+    elif ufo_position > (oled_width - len(UFO) * char_w):
+        ufo_position = (oled_width - len(UFO) * char_w)
+        
+    display_ufo(ufo_position)
