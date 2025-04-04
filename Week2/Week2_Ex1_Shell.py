@@ -36,11 +36,11 @@ else:
 
 # Print results directly from arrays without converting to lists
 print("Peak-to-peak intervals (samples):")
-for i in range(min(5, len(intervals))):  # Only print up to 5 intervals
+for i in range(min(5, len(intervals))):  
     print(intervals[i])
 
 print("Peak-to-peak intervals (seconds):")
-for i in range(min(5, len(time_intervals))):  # Only print up to 5 intervals
+for i in range(min(5, len(time_intervals))):  
     print(time_intervals[i])
 
 print("Estimated Frequency:", frequency, "Hz")
