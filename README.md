@@ -1,3 +1,5 @@
+Hardware 2 Project Assignments
+
 To setup on a new device
 Steps: 
 1. Clone the repo, 
