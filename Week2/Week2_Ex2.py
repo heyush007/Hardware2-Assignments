@@ -52,5 +52,5 @@ for i in range(len(samples_10s)):
 
 # Print first 10 scaled values from the 10 seconds of data
 print("\nScaled values for the first 10 seconds (0 to 100):")
-for i in range(10):
-    print(f"Sample {i + 1}: {scaled_samples_10s[i]:.2f}")
+for i in range(len(scaled_samples_10s)):
+    print(f"{scaled_samples_10s[i]:.2f}")
