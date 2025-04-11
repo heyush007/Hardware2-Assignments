@@ -1,76 +1,125 @@
 from machine import Pin, I2C
 import time
 from ssd1306 import SSD1306_I2C
-import array
 
-# OLED Setup (I2C)
-i2c = I2C(1, scl=Pin(15), sda=Pin(14), freq=400000) 
-oled_width = 128
-oled_height = 64
-oled = SSD1306_I2C(oled_width, oled_height, i2c)
+t= 50
+# OLED Setup
+i2c = I2C(1, scl=Pin(15), sda=Pin(14), freq=400000)
+oled = SSD1306_I2C(128, 64, i2c)
 
-# Define LED pins
-led_pins = array.array('I', [2, 3, 4])  
-led_states = array.array('b', [0, 0, 0])
+# LED Pins
+led1 = Pin(20, Pin.OUT)
+led2 = Pin(21, Pin.OUT)
+led3 = Pin(22, Pin.OUT)
 
-# Rotary Encoder Pins
-clk = Pin(10, Pin.IN, Pin.PULL_UP)  
-dt = Pin(11, Pin.IN, Pin.PULL_UP)   
-sw = Pin(12, Pin.IN, Pin.PULL_UP)   
+# Rotary Encoder Pins 
+clk = Pin(10, Pin.IN, Pin.PULL_UP) #Clock pin
+dt = Pin(11, Pin.IN, Pin.PULL_UP)  #Data Pin
+sw = Pin(12, Pin.IN, Pin.PULL_UP)  #Button Switch Pin
 
-# Variables
-menu_index = 0
-last_clk_state = clk.value()
-last_press_time = 0  # Debounce timing
+# State using a closure
+def create_state():
+    selected_led = 0  #0 for LED1, 1 for LED2, 2 for LED3
+    led1_on = 0
+    led1_on = 0
+    led2_on = 0
+    led3_on = 0
+    event = 0   #0: no event, 1: rotation, 2: button press
+    last_clk = clk.value()
+    last_press_time = time.ticks_ms() # Track time of last press for debounce
 
-event_fifo = array.array('b', [0])  # FIFO buffer
+    def get():
+        return selected_led, led1_on, led2_on, led3_on, event, last_clk, last_press_time
 
-def rotary_interrupt(pin):
-    global menu_index, last_clk_state
-    new_clk_state = clk.value()
-    
-    if new_clk_state != last_clk_state:
-        if dt.value() != new_clk_state:
-            menu_index = (menu_index + 1) % 3  # Wrap around
+    def set(sel=None, s1=None, s2=None, s3=None, e=None, clk_val=None, press_time=None):
+        nonlocal selected_led, led1_on, led2_on, led3_on, event, last_clk, last_press_time
+        if sel is not None: selected_led = sel
+        if s1 is not None: led1_on = s1
+        if s2 is not None: led2_on = s2
+        if s3 is not None: led3_on = s3
+        if e is not None: event = e
+        if clk_val is not None: last_clk = clk_val
+        if press_time is not None: last_press_time = press_time
+
+    def clear_event():
+        nonlocal event
+        event = 0
+
+    return get, set, clear_event
+
+get_state, set_state, clear_event = create_state()
+
+# OLED Update 
+def update_display():
+    selected_led, led1_on, led2_on, led3_on, *_ = get_state()
+
+    oled.fill(0) 
+
+    # Helper to format a line
+    def format_line(index, is_on, selected):
+        if selected:
+            return f"[LED{index + 1} - {'ON ' if is_on else 'OFF'}]"
         else:
-            menu_index = (menu_index - 1) % 3
-        event_fifo[0] = 1
-    last_clk_state = new_clk_state
+            return f" LED{index + 1} - {'ON ' if is_on else 'OFF'}"
 
-def button_interrupt(pin):
-    global last_press_time
-    current_time = time.ticks_ms()
-    if time.ticks_diff(current_time, last_press_time) > 50:
-        event_fifo[0] = 2
-        last_press_time = current_time
+    oled.text(format_line(0, led1_on, selected_led == 0), 0, 0)
+    oled.text(format_line(1, led2_on, selected_led == 1), 0, 12)
+    oled.text(format_line(2, led3_on, selected_led == 2), 0, 24)
 
-# Attach interrupts
-clk.irq(trigger=Pin.IRQ_FALLING, handler=rotary_interrupt)
-sw.irq(trigger=Pin.IRQ_FALLING, handler=button_interrupt)
-
-def update_oled():
-    oled.fill(0)
-    for i in range(3):
-        indicator = "->" if i == menu_index else "  "
-        status = "ON" if led_states[i] else "OFF"
-        oled.text(f"{indicator} LED{i+1}: {status}", 10, i * 12)
     oled.show()
 
-def toggle_led():
-    led_states[menu_index] = 1 - led_states[menu_index]
-    Pin(led_pins[menu_index], Pin.OUT).value(led_states[menu_index])
+# Rotary Interrupt Handler
+def rotary_handler(pin):
+    selected_led, l1, l2, l3, event, last_clk, last_press = get_state()
+    new_clk = clk.value()
 
-# Initialize OLED
-time.sleep(1)
-update_oled()
+    if new_clk != last_clk:
+        if dt.value() != new_clk:
+            selected_led = (selected_led + 1) % 3  # Clockwise
+        else:
+            selected_led = (selected_led - 1) % 3  # Anticlockwise
+        set_state(sel=selected_led, e=1)  # Mark event = 1 (rotation)
 
-# Main loop
+    set_state(clk_val=new_clk)  # Update last CLK value
+
+# Button Press Interrupt Handler with debounce 
+def button_handler(pin):
+    selected_led, l1, l2, l3, event, last_clk, last_press = get_state()
+    now = time.ticks_ms()
+
+    # Ignore presses that are too close together
+    if time.ticks_diff(now, last_press) > t:
+        set_state(e=2, press_time=now)
+
+# Attach Interrupts 
+clk.irq(trigger=Pin.IRQ_FALLING | Pin.IRQ_RISING, handler=rotary_handler)
+sw.irq(trigger=Pin.IRQ_FALLING, handler=button_handler)
+
+# Show Initial Menu 
+update_display()
+
+# Main Loop
 while True:
-    if event_fifo[0] != 0:
-        event = event_fifo[0]
-        event_fifo[0] = 0
-        if event == 1:
-            update_oled()
-        elif event == 2:
-            toggle_led()
-            update_oled()
+    selected_led, l1, l2, l3, event, *_ = get_state()
+
+    if event == 1:
+        # Encoder turned: just update the display
+        update_display()
+        clear_event()
+
+    elif event == 2:
+        # Button pressed: toggle selected LED
+        if selected_led == 0:
+            l1 = 1 - l1  # Toggle LED1
+            led1.value(l1)
+        elif selected_led == 1:
+            l2 = 1 - l2  # Toggle LED2
+            led2.value(l2)
+        elif selected_led == 2:
+            l3 = 1 - l3  # Toggle LED3
+            led3.value(l3)
+
+        # Save updated states and refresh display
+        set_state(s1=l1, s2=l2, s3=l3)
+        update_display()
+        clear_event()
